@@ -1,11 +1,12 @@
 import os
 import re
 import platform
+import select
 from subprocess import Popen, PIPE
 
 
 class ChatBot(object):
-    def __init__(self, dist_dir="", cli_dir="", verbose=False):
+    def __init__(self, dist_dir="", cli_dir="", verbose=False, output_timeout=0.5):
         """
         Initialize the ChatBot object.
 
@@ -16,9 +17,13 @@ class ChatBot(object):
         :param verbose: bool, optional
             If True, the ChatBot will print more detailed information for debugging purposes. 
             Defaults to False.
+        :param output_timeout: float, optional
+            Time in seconds to wait for absence of changes in stdout to handle multi-line output correctly 
+            Defaults to 0.5.
         """
         self.verbose = verbose
         self.prefix = "USER: ASSISTANT: "
+        self.output_timeout = output_timeout
 
         dist_dir = os.path.abspath(os.path.dirname(dist_dir))
         cli_dir = os.path.abspath(os.path.dirname(cli_dir))
@@ -66,7 +71,14 @@ class ChatBot(object):
     def _write(self, text):
         self.process.stdin.write(text + "\n")
         self.process.stdin.flush()
-        return self._crop(self.process.stdout.readline().strip())
+        lines = ''
+        while True:
+            ready, _, _ = select.select([self.process.stdout], [], [], self.output_timeout)
+            if not ready:
+                break
+            line = self.process.stdout.readline()
+            lines += line
+        return self._crop(lines.strip())
 
     def send(self, text):
         return self._write(text)
